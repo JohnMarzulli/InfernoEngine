@@ -10,8 +10,8 @@ public:
   }
 
   TemperatureReport(
-    float currentTemp,
-    unsigned long currentTime) {
+    unsigned long currentTime,
+    float currentTemp) {
     _isValid = true;
 
     _temp = currentTemp;
@@ -22,8 +22,12 @@ public:
     return _temp;
   }
 
-  unsigned long int GetTime() {
+  unsigned long int GetTimestamp() {
     return _time;
+  }
+
+  bool IsValid() {
+    return _isValid;
   }
 
 private:

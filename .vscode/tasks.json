@@ -1,0 +1,19 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build test_temperature_report",
+            "type": "shell",
+            "command": "pio test -e native --filter test_temperature_report --without-testing",
+            "group": "build",
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "Build test_temperature_history",
+            "type": "shell",
+            "command": "pio test -e native --filter test_temperature_history --without-testing",
+            "group": "build",
+            "problemMatcher": ["$gcc"]
+        }
+    ]
+}

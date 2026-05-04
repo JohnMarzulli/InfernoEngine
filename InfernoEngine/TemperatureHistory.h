@@ -28,7 +28,9 @@ public:
     return _reports[(_head + _reportCount - 1) % MAX_REPORTS].GetTemp();
   }
 
-  TemperatureReport GetReport(int index) {
+  TemperatureReport GetReport(
+    int index
+  ) {
     if (index < 0 || index >= _reportCount) {
       return TemperatureReport();
     }
