@@ -1,0 +1,35 @@
+---
+Infernal Engine Architecture
+---
+flowchart
+    subgraph Clients
+        InfernalEngine
+    end
+
+    subgraph Managers
+        PredictionManager
+        FanManager
+        BleDeviceManager
+    end
+
+    subgraph Utilities
+        Regression
+    end
+
+    subgraph ResourceAccess
+        BleDevice@{ shape: processes}
+        TemperatureHistory@{ shape: win-pane }
+        FanHardwareController
+    end
+
+    InfernalEngine --> FanManager
+    InfernalEngine --> BleDeviceManager
+    InfernalEngine --> PredictionManager
+
+    PredictionManager --> TemperatureHistory
+    PredictionManager --> Regression
+
+    FanManager --> FanHardwareController
+    
+    BleDeviceManager --> BleDevice
+
