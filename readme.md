@@ -39,3 +39,7 @@ Included in the `Tools` folder is a Python program.
 This will search for a CPT and GGG, printing connection and read data to the console.
 
 Use this if the suspect the devices are not being found or connected to.
+
+## Documentation
+
+Combustion has placed their specification, and a plethora of helpful documentation at [Docs](https://github.com/combustion-inc/combustion-documentation/blob/main/gauge_ble_specification.rst#alarm-status)
