@@ -31,3 +31,11 @@ pio test -e native
 ```
 
 You can also use the launch configuration to debug.
+
+## Debugging
+
+Included in the `Tools` folder is a Python program.
+
+This will search for a CPT and GGG, printing connection and read data to the console.
+
+Use this if the suspect the devices are not being found or connected to.
