@@ -59,6 +59,8 @@ public:
   // Pit temperature in °C. Only meaningful when IsSensorPresent() is true.
   float GetTemp() const { return _temperature; }
 
+  unsigned long GetLastReadMs() const { return _lastSuccessfulReadMs; }
+
   void OnAdvertisement(const GaugeAdvertisement &ad) {
     _temperature = ad.temperature;
     _sensorPresent = ad.sensorPresent;

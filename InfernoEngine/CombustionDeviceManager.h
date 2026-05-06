@@ -6,6 +6,8 @@
 #include "GaugeAdvertisement.h"
 #include "GrillGauge.h"
 #include "PredictiveThermometer.h"
+#include "TemperatureHistory.h"
+#include "TemperatureReport.h"
 #include <string.h>
 
 static const int MAX_COMBUSTION_DEVICES = 8;
@@ -27,7 +29,7 @@ class CombustionDeviceManager {
 public:
   CombustionDeviceManager()
       : _thermometerCount(0), _grillGaugeCount(0), _cptSeenCount(0),
-        _gggSeenCount(0) {
+        _gggSeenCount(0), _lastHistoryPushMs(0) {
     for (int i = 0; i < MAX_COMBUSTION_DEVICES; i++) {
       _thermometers[i] = nullptr;
       _grillGauges[i] = nullptr;
@@ -41,7 +43,12 @@ public:
       delete _grillGauges[i];
   }
 
-  void Service() { PlatformService(); }
+  void Service() {
+    PlatformService();
+    ServiceTemperatureHistory();
+  }
+
+  TemperatureHistory &GetTemperatureHistory() { return _history; }
 
   // --- Thermometer (CPT) accessors ---
 
@@ -164,6 +171,9 @@ private:
   bool _gggSeenThisCycle[MAX_COMBUSTION_DEVICES];
   int _gggSeenCount;
 
+  TemperatureHistory _history;
+  unsigned long _lastHistoryPushMs;
+
   PredictiveThermometer *FindOrCreateThermometer(uint32_t serial) {
     for (int i = 0; i < _thermometerCount; i++) {
       if (_thermometers[i]->GetSerialNumber() == serial)
@@ -236,6 +246,26 @@ private:
       _cptSeenThisCycle[i] = false;
     for (int i = 0; i < _gggSeenCount; i++)
       _gggSeenThisCycle[i] = false;
+  }
+
+  static const unsigned long HISTORY_PUSH_INTERVAL_MS = 5000UL;
+
+  void ServiceTemperatureHistory() {
+    unsigned long now = millis();
+    if (_lastHistoryPushMs != 0 &&
+        (now - _lastHistoryPushMs) < HISTORY_PUSH_INTERVAL_MS)
+      return;
+
+    for (int i = 0; i < _grillGaugeCount; i++) {
+      GrillGauge *g = _grillGauges[i];
+      if (!g->IsConnected() || !g->IsSensorPresent())
+        continue;
+      if ((now - g->GetLastReadMs()) >= HISTORY_PUSH_INTERVAL_MS)
+        continue;
+      _history.Report(TemperatureReport(now, g->GetTemp()));
+      _lastHistoryPushMs = now;
+      return;
+    }
   }
 
   void PlatformService() {

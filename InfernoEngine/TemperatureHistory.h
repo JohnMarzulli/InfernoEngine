@@ -3,12 +3,12 @@
 
 #include "TemperatureReport.h"
 
-const int MAX_REPORTS = 100;
+const int MAX_REPORTS = 500; // If sampling at once every 5 seconds, this allows
+                             // for about 40 minutes of history
 
 class TemperatureHistory {
 public:
-  TemperatureHistory() {
-  }
+  TemperatureHistory() {}
 
   void Report(TemperatureReport report) {
     if (_reportCount >= MAX_REPORTS) {
@@ -28,9 +28,7 @@ public:
     return _reports[(_head + _reportCount - 1) % MAX_REPORTS].GetTemp();
   }
 
-  TemperatureReport GetReport(
-    int index
-  ) {
+  TemperatureReport GetReport(int index) {
     if (index < 0 || index >= _reportCount) {
       return TemperatureReport();
     }
@@ -38,9 +36,7 @@ public:
     return _reports[(_head + index) % MAX_REPORTS];
   }
 
-  int GetReportCount() {
-    return _reportCount;
-  }
+  int GetReportCount() { return _reportCount; }
 
 private:
   TemperatureReport _reports[MAX_REPORTS];
