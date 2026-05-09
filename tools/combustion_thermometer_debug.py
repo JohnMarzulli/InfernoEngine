@@ -18,10 +18,11 @@ Usage:
 """
 
 import asyncio
+from io import TextIOWrapper
 import struct
 import argparse
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from bleak import BleakScanner
 from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
@@ -43,6 +44,85 @@ CPT_MIN_PAYLOAD = 18
 GGG_MIN_PAYLOAD = 19
 
 PROBE_COUNT = 8
+START_TIME_MS = int(time.time() * 1000)
+
+
+# ---------------------------------------------------------------------------
+# Result type
+# ---------------------------------------------------------------------------
+
+class DeviceResult:
+    def __init__(self, result: dict, address: str):
+        self.result = result
+        self.address = address
+
+        self.real_timestamp: str = datetime.now(timezone.utc).isoformat()
+        self.millis_since_start: int = int(time.time() * 1000) - START_TIME_MS
+        self.product_type: str = 'UNK'
+        self.serial: str = 'UNK'
+        self.display_str: str = 'UNK'
+        self.ambient_temperature: float = 0.0
+        self.main_temperature: float = 0.0
+        self.sensor_present: bool = False
+        self.overheating: bool = False
+        self.low_battery: bool = False
+        self.high_alarm_set: bool = False
+        self.high_alarm_tripped: bool = False
+        self.high_alarm_alarming: bool = False
+        self.high_alarm_threshold: float = 0.0
+        self.low_alarm_set: bool = False
+        self.low_alarm_tripped: bool = False
+        self.low_alarm_alarming: bool = False
+        self.low_alarm_threshold: float = 0.0
+        self.raw_payload: bytes = b''
+
+    def __str__(self) -> str:
+        ts = datetime.now().strftime('%H:%M:%S')
+        if self.product_type == 'CPT':
+            temps = self.result['temps']
+            probe_str = '  '.join(
+                f'T{i+1}:{t:6.2f}°C' for i, t in enumerate(temps))
+            return (f'[{ts}] CPT  Serial {int(self.serial):>10d}  {self.address}  |  '
+                    f'{probe_str}  |  Ambient(T8): {self.ambient_temperature:6.2f}°C')
+        # GGG
+        if not self.sensor_present:
+            temp_str = 'No probe attached'
+        else:
+            temp_str = f'Pit: {self.main_temperature:6.2f}°C'
+            if self.overheating:
+                temp_str += '  [OVERHEATING]'
+        flags_str = '  Low battery' if self.low_battery else ''
+        high = {'set': self.high_alarm_set, 'tripped': self.high_alarm_tripped,
+                'alarming': self.high_alarm_alarming, 'threshold': self.high_alarm_threshold}
+        low = {'set': self.low_alarm_set, 'tripped': self.low_alarm_tripped,
+               'alarming': self.low_alarm_alarming, 'threshold': self.low_alarm_threshold}
+        alarm_str = f'  |  {format_alarm("High", high)}  |  {format_alarm("Low", low)}'
+
+        return (f'[{ts}] GGG  Serial {self.serial}  {self.address}  |  'f'{temp_str}{flags_str}{alarm_str}')
+
+    def write_csv_line(self, file_handle: TextIOWrapper):
+        line = [
+            self.real_timestamp,
+            str(self.millis_since_start),
+            self.product_type,
+            self.serial,
+            f'{self.ambient_temperature:.2f}',
+            f'{self.main_temperature:.2f}',
+            '1' if self.sensor_present else '0',
+            '1' if self.overheating else '0',
+            '1' if self.low_battery else '0',
+            '1' if self.high_alarm_set else '0',
+            '1' if self.high_alarm_tripped else '0',
+            '1' if self.high_alarm_alarming else '0',
+            f'{self.high_alarm_threshold:.2f}',
+            '1' if self.low_alarm_set else '0',
+            '1' if self.low_alarm_tripped else '0',
+            '1' if self.low_alarm_alarming else '0',
+            f'{self.low_alarm_threshold:.2f}',
+            self.raw_payload.hex()
+        ]
+        file_handle.write(','.join(line) + '\n')
+        file_handle.flush()
 
 
 # ---------------------------------------------------------------------------
@@ -83,12 +163,20 @@ def parse_cpt(payload: bytes) -> dict | None:
     return {'product_type': PRODUCT_TYPE_CPT, 'serial': serial, 'temps': temps}
 
 
-def format_cpt(result: dict, address: str) -> str:
+def format_cpt(result: dict, address: str) -> DeviceResult:
+    device = DeviceResult(result, address)
+    device.product_type = 'CPT'
+    device.serial = str(result['serial'])
     temps = result['temps']
+    device.ambient_temperature = temps[-1]
+    device.main_temperature = temps[0]
+    device.sensor_present = True
+    device.low_battery = result.get('low_battery', False)
     probe_str = '  '.join(f'T{i+1}:{t:6.2f}°C' for i, t in enumerate(temps))
     ts = datetime.now().strftime('%H:%M:%S')
-    return (f'[{ts}] CPT  Serial {result["serial"]:>10d}  {address}  |  '
-            f'{probe_str}  |  Ambient(T8): {temps[-1]:6.2f}°C')
+    device.display_str = (f'[{ts}] CPT  Serial {result["serial"]:>10d}  {address}  |  '
+                          f'{probe_str}  |  Ambient(T8): {temps[-1]:6.2f}°C')
+    return device
 
 
 # ---------------------------------------------------------------------------
@@ -165,16 +253,34 @@ def format_alarm(label: str, alarm: dict) -> str:
         ' Tripped' if alarm['tripped'] else '',
         ' Alarming' if alarm['alarming'] else '',
     ]).strip() or 'Off'
+
     return f'{label}: {alarm["threshold"]:6.2f}°C [{flags}]'
 
 
-def format_ggg(result: dict, address: str) -> str:
+def format_ggg(result: dict, address: str) -> DeviceResult:
+    device = DeviceResult(result, address)
+    device.product_type = 'GGG'
+    device.serial = result['serial']
+    device.main_temperature = result['temperature']
+    device.sensor_present = result['sensor_present']
+    device.overheating = result['overheating']
+    device.low_battery = result['low_battery']
+    device.high_alarm_set = result['high_alarm']['set']
+    device.high_alarm_tripped = result['high_alarm']['tripped']
+    device.high_alarm_alarming = result['high_alarm']['alarming']
+    device.high_alarm_threshold = result['high_alarm']['threshold']
+    device.low_alarm_set = result['low_alarm']['set']
+    device.low_alarm_tripped = result['low_alarm']['tripped']
+    device.low_alarm_alarming = result['low_alarm']['alarming']
+    device.low_alarm_threshold = result['low_alarm']['threshold']
+
     ts = datetime.now().strftime('%H:%M:%S')
 
     if not result['sensor_present']:
         temp_str = 'No probe attached'
     else:
         temp_str = f'Pit: {result["temperature"]:6.2f}°C'
+
         if result['overheating']:
             temp_str += '  [OVERHEATING]'
 
@@ -182,12 +288,13 @@ def format_ggg(result: dict, address: str) -> str:
         'Low battery' if result['low_battery'] else '',
     ]))
     flags_str = f'  {device_flags}' if device_flags else ''
+    alarm_str = (
+        f'  |  {format_alarm("High", result["high_alarm"])}'
+        f'  |  {format_alarm("Low", result["low_alarm"])}')
+    device.display_str = (
+        f'[{ts}] GGG  Serial {result["serial"]}  {address}  |  'f'{temp_str}{flags_str}{alarm_str}')
 
-    alarm_str = (f'  |  {format_alarm("High", result["high_alarm"])}'
-                 f'  |  {format_alarm("Low", result["low_alarm"])}')
-
-    return (f'[{ts}] GGG  Serial {result["serial"]}  {address}  |  '
-            f'{temp_str}{flags_str}{alarm_str}')
+    return device
 
 
 # ---------------------------------------------------------------------------
@@ -205,21 +312,25 @@ def parse_payload(payload: bytes) -> dict | None:
     return None
 
 
-def format_row(result: dict, address: str) -> str:
+def format_row(result: dict, address: str) -> DeviceResult:
     if result['product_type'] == PRODUCT_TYPE_CPT:
         return format_cpt(result, address)
     return format_ggg(result, address)
 
-
 # ---------------------------------------------------------------------------
 # Scanner
 # ---------------------------------------------------------------------------
+
 
 class Scanner:
     def __init__(self, serial_filter: int | None):
         self._serial_filter = serial_filter
         self._seen:       set[str] = set()
         self._last_print: dict[str, float] = {}
+        date_name: str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.__file_handle__: TextIOWrapper = open(
+            f'{date_name}_combustion_data.csv', 'w')
+        self.__write_csv_header__()
 
     def callback(self, device: BLEDevice, advertisement_data: AdvertisementData):
         payload = advertisement_data.manufacturer_data.get(
@@ -239,8 +350,9 @@ class Scanner:
 
         if device.address not in self._seen:
             self._seen.add(device.address)
-            name = PRODUCT_NAMES.get(result['product_type'],
-                                     f'0x{result["product_type"]:02X}')
+            name = PRODUCT_NAMES.get(
+                result['product_type'],
+                f'0x{result["product_type"]:02X}')
             print(
                 f'  *** New device: {name}  serial {result["serial"]}  @ {device.address} ***')
 
@@ -249,14 +361,42 @@ class Scanner:
             return
         self._last_print[device.address] = now
 
-        print('Payload: ' + payload.hex(' '))
-        print(format_row(result, device.address))
+        device_result = format_row(result, device.address)
+        device_result.raw_payload = payload
+        device_result.write_csv_line(self.__file_handle__)
+
+        print(device_result)
 
     async def run(self):
         print('Scanning for Combustion devices... (Ctrl+C to stop)\n')
         async with BleakScanner(self.callback):
             while True:
                 await asyncio.sleep(1.0)
+
+    def __write_csv_header__(
+        self,
+    ):
+        header = [
+            'real_timestamp',
+            'millis_since_start',
+            'product_type',
+            'serial',
+            'ambient_temperature',
+            'main_temperature',
+            'sensor_present',
+            'overheating',
+            'low_battery',
+            'high_alarm_set',
+            'high_alarm_tripped',
+            'high_alarm_alarming',
+            'high_alarm_threshold',
+            'low_alarm_set',
+            'low_alarm_tripped',
+            'low_alarm_alarming',
+            'low_alarm_threshold',
+            'raw_payload'
+        ]
+        self.__file_handle__.write(','.join(header) + '\n')
 
 
 def main():

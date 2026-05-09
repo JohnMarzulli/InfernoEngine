@@ -5,6 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python Debugger: Combustion Debugger",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/combustion_thermometer_debug.py",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Debug Native Test",
             "type": "cppdbg",
             "request": "launch",
