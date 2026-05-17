@@ -9,23 +9,27 @@ public:
   }
 
   void SetTarget(float targetProportion) {
-    if (_target < 0.0f) {
-      _target = 0.0f;
-    } else if (_target > 1.0f) {
-      _target = 1.0f;
+    if (targetProportion < 0.0f) {
+      Serial.println("Warning: Clamping _target to 0.");
+
+      targetProportion = 0.0f;
+    } else if (targetProportion > 1.0f) {
+      Serial.println("Warning: Clamping _target to 1.");
+
+      targetProportion = 1.0f;
+    }
+
+    if (_target != targetProportion) {
+      Serial.printf("Fan target changing from %f to %f\n", _target,
+                    targetProportion);
     }
 
     _target = targetProportion;
-
-    printf("Setting target fan proportion: %f\n", _target);
   }
 
   float GetTarget() { return _target; }
 
-  void Service(float targetProportion) {
-    _target = targetProportion;
-    analogWrite(_ioPin, (int)(_target * 255));
-  }
+  void Service() { analogWrite(_ioPin, (int)(_target * 255)); }
 
 private:
   unsigned int _ioPin = 0;
