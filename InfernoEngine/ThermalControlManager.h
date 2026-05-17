@@ -38,7 +38,34 @@ public:
    * @brief Performs any updates or device management during a "tick".
    *
    */
-  void Service() {}
+  void Service() {
+    if (_temperatureHistory.GetReportCount() <= 0) {
+      _targetProportion = 0.0f;
+
+      return;
+    }
+
+    float currentTemp = _temperatureHistory.GetCurrentTemp();
+    float tempDelta = _targetTemperature - currentTemp;
+
+    if (currentTemp >= _targetTemperature) {
+      _targetProportion = 0.0f;
+
+      return;
+    }
+
+    if (tempDelta <= pidRange) {
+      _targetProportion = GetPidProportion(tempDelta);
+
+      return;
+    }
+
+    // TODO: Use the regression system to determine the proportion here.
+    // TODO: Implement a system where the fan turns off for a while to determine
+    //       the actual effect the fan is really having... and to stabilize the
+    //       heat in the pit.
+    _targetProportion = 1.0f;
+  }
 
   /**
    * @brief Get a proportion (0.0 => off, 1.0 => full) of how hard the fan
@@ -46,28 +73,7 @@ public:
    *
    * @return float A proportion of how hard the fan should be running.
    */
-  float GetTargetFanProportion() {
-    if (_temperatureHistory.GetReportCount() <= 0) {
-      return 0.0f;
-    }
-
-    float currentTemp = _temperatureHistory.GetCurrentTemp();
-    float tempDelta = _targetTemperature - currentTemp;
-
-    if (currentTemp >= _targetTemperature) {
-      return 0.0f;
-    }
-
-    if (tempDelta <= pidRange) {
-      return GetPidProportion(tempDelta);
-    }
-
-    // TODO: Use the regression system to determine the proportion here.
-    // TODO: Implement a system where the fan turns off for a while to determine
-    //       the actual effect the fan is really having... and to stabilize the
-    //       heat in the pit.
-    return 1.0;
-  }
+  float GetTargetFanProportion() { return _targetProportion; }
 
 private:
   float GetPidProportion(float tempDelta) {
@@ -77,6 +83,7 @@ private:
   }
 
   TemperatureHistory _temperatureHistory;
+  float _targetProportion = 0.0f;
   float _targetTemperature = 0.0f;
   float pidRange = 10.0f;
   float pidScaler = 0.25f;
