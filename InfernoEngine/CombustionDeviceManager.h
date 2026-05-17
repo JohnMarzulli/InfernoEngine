@@ -35,13 +35,19 @@ public:
     delete _grillGauge;
   }
 
-  void Service() {}
+  void Service() {
+    bool rawConnected = _grillGauge != nullptr && _grillGauge->IsConnected();
+    if (rawConnected) {
+      _isConnected = true;
+      _disconnectTicks = 0;
+    } else if (++_disconnectTicks >= DISCONNECT_HYSTERESIS_TICKS) {
+      _isConnected = false;
+    }
+  }
 
   // --- Convenience ---
 
-  bool IsConnected() const {
-    return _grillGauge != nullptr && _grillGauge->IsConnected();
-  }
+  bool IsConnected() const { return _isConnected; }
 
   // Pit temperature from the first connected Grill Gauge whose probe is
   // present.
@@ -93,7 +99,11 @@ public:
   }
 
 private:
+  static const uint8_t DISCONNECT_HYSTERESIS_TICKS = 3;
+
   GrillGauge *_grillGauge;
+  bool _isConnected = false;
+  uint8_t _disconnectTicks = 0;
 };
 
 #endif
