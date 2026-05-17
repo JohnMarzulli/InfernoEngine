@@ -76,6 +76,10 @@ Both "Out +" and "Out -" travel to both the MT3608 and the R-Pi Pico W
 | Red        | MT3608 V Out + | L298N 12V |
 | Black      | MT3608 V Out - | L298N GND |
 
+Note that the voltage controller will have a small screw adjustment. This is used to sert the target output voltage.
+
+Using a multimeter across the V-Out pins, set to 12V before connecting the motor controller.
+
 ### L298N Motor Controller
 
 The motor controller is a destination for all of the other modules.
