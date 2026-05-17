@@ -31,12 +31,11 @@ static inline unsigned long millis() {
  */
 class GrillGauge {
 public:
-  static const uint8_t MAX_CONSECUTIVE_FAILURES = 5;
-  static const unsigned long CONNECTION_TIMEOUT_MS = 120000UL; // 2 minutes
+  static const unsigned long CONNECTION_TIMEOUT_MS = 30000UL;
 
   explicit GrillGauge(const char *serialNumber)
       : _temperature(0.0f), _sensorPresent(false), _sensorOverheating(false),
-        _lowBattery(false), _lastSuccessfulReadMs(0), _consecutiveFailures(0) {
+        _lowBattery(false), _lastSuccessfulReadMs(0) {
     strncpy(_serialNumber, serialNumber, 10);
     _serialNumber[10] = '\0';
   }
@@ -45,8 +44,6 @@ public:
 
   bool IsConnected() const {
     if (_lastSuccessfulReadMs == 0)
-      return false;
-    if (_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES)
       return false;
     return (millis() - _lastSuccessfulReadMs) <= CONNECTION_TIMEOUT_MS;
   }
@@ -67,18 +64,8 @@ public:
     _sensorOverheating = ad.sensorOverheating;
     _lowBattery = ad.lowBattery;
     _lastSuccessfulReadMs = millis();
-    _consecutiveFailures = 0;
   }
 
-  void ReportMissed() {
-    if (_lastSuccessfulReadMs == 0)
-      return;
-    if (_consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
-      _consecutiveFailures++;
-    }
-  }
-
-  void Service() {}
 
 private:
   char _serialNumber[11];
@@ -87,7 +74,6 @@ private:
   bool _sensorOverheating;
   bool _lowBattery;
   unsigned long _lastSuccessfulReadMs;
-  uint8_t _consecutiveFailures;
 };
 
 #endif

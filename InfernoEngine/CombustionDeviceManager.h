@@ -1,6 +1,8 @@
 #ifndef COMBUSTION_DEVICE_MANAGER_H
 #define COMBUSTION_DEVICE_MANAGER_H
 
+#include <BTstackLib.h>
+
 #include "CombustionAdvertisement.h"
 #include "CombustionBleParser.h"
 #include "GaugeAdvertisement.h"
@@ -9,8 +11,6 @@
 #include "TemperatureHistory.h"
 #include "TemperatureReport.h"
 #include <string.h>
-
-static const int MAX_COMBUSTION_DEVICES = 8;
 
 /**
  * @brief Manages discovery and lifetime of all Combustion Inc BLE devices.
@@ -27,86 +27,29 @@ static const int MAX_COMBUSTION_DEVICES = 8;
  */
 class CombustionDeviceManager {
 public:
-  CombustionDeviceManager()
-      : _thermometerCount(0), _grillGaugeCount(0), _cptSeenCount(0),
-        _gggSeenCount(0), _lastHistoryPushMs(0) {
-    for (int i = 0; i < MAX_COMBUSTION_DEVICES; i++) {
-      _thermometers[i] = nullptr;
-      _grillGauges[i] = nullptr;
-    }
+  CombustionDeviceManager() {
+    _grillGauge = nullptr;
   }
 
   ~CombustionDeviceManager() {
-    for (int i = 0; i < _thermometerCount; i++)
-      delete _thermometers[i];
-    for (int i = 0; i < _grillGaugeCount; i++)
-      delete _grillGauges[i];
+    delete _grillGauge;
   }
 
-  void Service() {
-    PlatformService();
-    ServiceTemperatureHistory();
-  }
-
-  TemperatureHistory &GetTemperatureHistory() { return _history; }
-
-  // --- Thermometer (CPT) accessors ---
-
-  int GetThermometerCount() const { return _thermometerCount; }
-
-  PredictiveThermometer *GetThermometer(int index) {
-    if (index < 0 || index >= _thermometerCount)
-      return nullptr;
-    return _thermometers[index];
-  }
-
-  PredictiveThermometer *GetThermometerBySerial(uint32_t serial) {
-    for (int i = 0; i < _thermometerCount; i++) {
-      if (_thermometers[i]->GetSerialNumber() == serial)
-        return _thermometers[i];
-    }
-    return nullptr;
-  }
-
-  // --- Grill Gauge (GGG) accessors ---
-
-  int GetGrillGaugeCount() const { return _grillGaugeCount; }
-
-  GrillGauge *GetGrillGauge(int index) {
-    if (index < 0 || index >= _grillGaugeCount)
-      return nullptr;
-    return _grillGauges[index];
-  }
-
-  GrillGauge *GetGrillGaugeBySerial(const char *serial) {
-    for (int i = 0; i < _grillGaugeCount; i++) {
-      if (strncmp(_grillGauges[i]->GetSerialNumber(), serial, 10) == 0)
-        return _grillGauges[i];
-    }
-    return nullptr;
-  }
+  void Service() {}
 
   // --- Convenience ---
 
   bool IsConnected() const {
-    for (int i = 0; i < _thermometerCount; i++) {
-      if (_thermometers[i]->IsConnected())
-        return true;
-    }
-    for (int i = 0; i < _grillGaugeCount; i++) {
-      if (_grillGauges[i]->IsConnected())
-        return true;
-    }
-    return false;
+    return _grillGauge != nullptr && _grillGauge->IsConnected();
   }
 
   // Pit temperature from the first connected Grill Gauge whose probe is
   // present.
   float GetCurrentTemperature() const {
-    for (int i = 0; i < _grillGaugeCount; i++) {
-      if (_grillGauges[i]->IsConnected() && _grillGauges[i]->IsSensorPresent())
-        return _grillGauges[i]->GetTemp();
+    if (_grillGauge != nullptr && _grillGauge->IsConnected() && _grillGauge->IsSensorPresent()) {
+      return _grillGauge->GetTemp();
     }
+
     return 0.0f;
   }
 
@@ -117,167 +60,40 @@ public:
       return;
 
     switch (payload[0]) {
-    case CombustionBleParser::PRODUCT_TYPE_PREDICTIVE_THERMOMETER: {
-      CombustionAdvertisement ad = CombustionBleParser::Parse(payload, length);
-      if (!ad.isValid)
-        return;
-      PredictiveThermometer *t = FindOrCreateThermometer(ad.serialNumber);
-      if (t) {
-        t->OnAdvertisement(ad);
-        MarkCptSeen(ad.serialNumber);
-      }
-      break;
-    }
-    case CombustionBleParser::PRODUCT_TYPE_GRILL_GAUGE: {
-      GaugeAdvertisement ad = CombustionBleParser::ParseGauge(payload, length);
-      if (!ad.isValid)
-        return;
-      GrillGauge *g = FindOrCreateGrillGauge(ad.serialNumber);
-      if (g) {
-        g->OnAdvertisement(ad);
-        MarkGggSeen(ad.serialNumber);
-      }
-      break;
-    }
-    }
-  }
+      case CombustionBleParser::PRODUCT_TYPE_PREDICTIVE_THERMOMETER:
+        {
+          Serial.printf("[CPT] Payload received, length=%u\n", length);
 
-  void OnScanCycleComplete() {
-    for (int i = 0; i < _thermometerCount; i++) {
-      if (!WasCptSeenThisCycle(_thermometers[i]->GetSerialNumber()))
-        _thermometers[i]->ReportMissed();
+          break;
+        }
+      case CombustionBleParser::PRODUCT_TYPE_GRILL_GAUGE:
+        {
+          /*
+      Serial.printf("[GGG] Payload received, length=%u\n", length);
+      */
+          GaugeAdvertisement ad = CombustionBleParser::ParseGauge(payload, length);
+          if (!ad.isValid) {
+            Serial.println("[GGG] Parse failed — advertisement marked invalid\n");
+
+            return;
+          }
+          Serial.printf("[GGG] Parsed - serial=%.10s, temp=%.1fC\n", ad.serialNumber,
+                        ad.temperature);
+
+          if (_grillGauge == nullptr) {
+            Serial.printf("[GGG] New gauge discovered serial=%.10s\n",
+                          ad.serialNumber);
+            _grillGauge = new GrillGauge(ad.serialNumber);
+          }
+
+          _grillGauge->OnAdvertisement(ad);
+          break;
+        }
     }
-    for (int i = 0; i < _grillGaugeCount; i++) {
-      if (!WasGggSeenThisCycle(_grillGauges[i]->GetSerialNumber()))
-        _grillGauges[i]->ReportMissed();
-    }
-    ClearSeenThisCycle();
   }
 
 private:
-  PredictiveThermometer *_thermometers[MAX_COMBUSTION_DEVICES];
-  int _thermometerCount;
-
-  GrillGauge *_grillGauges[MAX_COMBUSTION_DEVICES];
-  int _grillGaugeCount;
-
-  // CPT seen-this-cycle: tracked by uint32 serial
-  uint32_t _cptSeenSerials[MAX_COMBUSTION_DEVICES];
-  bool _cptSeenThisCycle[MAX_COMBUSTION_DEVICES];
-  int _cptSeenCount;
-
-  // GGG seen-this-cycle: tracked by 10-char alphanumeric serial
-  char _gggSeenSerials[MAX_COMBUSTION_DEVICES][11];
-  bool _gggSeenThisCycle[MAX_COMBUSTION_DEVICES];
-  int _gggSeenCount;
-
-  TemperatureHistory _history;
-  unsigned long _lastHistoryPushMs;
-
-  PredictiveThermometer *FindOrCreateThermometer(uint32_t serial) {
-    for (int i = 0; i < _thermometerCount; i++) {
-      if (_thermometers[i]->GetSerialNumber() == serial)
-        return _thermometers[i];
-    }
-    if (_thermometerCount >= MAX_COMBUSTION_DEVICES)
-      return nullptr;
-    PredictiveThermometer *t = new PredictiveThermometer(serial);
-    _thermometers[_thermometerCount] = t;
-    _cptSeenSerials[_cptSeenCount] = serial;
-    _cptSeenThisCycle[_cptSeenCount] = false;
-    _cptSeenCount++;
-    _thermometerCount++;
-    return t;
-  }
-
-  GrillGauge *FindOrCreateGrillGauge(const char *serial) {
-    for (int i = 0; i < _grillGaugeCount; i++) {
-      if (strncmp(_grillGauges[i]->GetSerialNumber(), serial, 10) == 0)
-        return _grillGauges[i];
-    }
-    if (_grillGaugeCount >= MAX_COMBUSTION_DEVICES)
-      return nullptr;
-    GrillGauge *g = new GrillGauge(serial);
-    _grillGauges[_grillGaugeCount] = g;
-    strncpy(_gggSeenSerials[_gggSeenCount], serial, 10);
-    _gggSeenSerials[_gggSeenCount][10] = '\0';
-    _gggSeenThisCycle[_gggSeenCount] = false;
-    _gggSeenCount++;
-    _grillGaugeCount++;
-    return g;
-  }
-
-  void MarkCptSeen(uint32_t serial) {
-    for (int i = 0; i < _cptSeenCount; i++) {
-      if (_cptSeenSerials[i] == serial) {
-        _cptSeenThisCycle[i] = true;
-        return;
-      }
-    }
-  }
-
-  bool WasCptSeenThisCycle(uint32_t serial) const {
-    for (int i = 0; i < _cptSeenCount; i++) {
-      if (_cptSeenSerials[i] == serial)
-        return _cptSeenThisCycle[i];
-    }
-    return false;
-  }
-
-  void MarkGggSeen(const char *serial) {
-    for (int i = 0; i < _gggSeenCount; i++) {
-      if (strncmp(_gggSeenSerials[i], serial, 10) == 0) {
-        _gggSeenThisCycle[i] = true;
-        return;
-      }
-    }
-  }
-
-  bool WasGggSeenThisCycle(const char *serial) const {
-    for (int i = 0; i < _gggSeenCount; i++) {
-      if (strncmp(_gggSeenSerials[i], serial, 10) == 0)
-        return _gggSeenThisCycle[i];
-    }
-    return false;
-  }
-
-  void ClearSeenThisCycle() {
-    for (int i = 0; i < _cptSeenCount; i++)
-      _cptSeenThisCycle[i] = false;
-    for (int i = 0; i < _gggSeenCount; i++)
-      _gggSeenThisCycle[i] = false;
-  }
-
-  static const unsigned long HISTORY_PUSH_INTERVAL_MS = 5000UL;
-
-  void ServiceTemperatureHistory() {
-    unsigned long now = millis();
-    if (_lastHistoryPushMs != 0 &&
-        (now - _lastHistoryPushMs) < HISTORY_PUSH_INTERVAL_MS)
-      return;
-
-    for (int i = 0; i < _grillGaugeCount; i++) {
-      GrillGauge *g = _grillGauges[i];
-      if (!g->IsConnected() || !g->IsSensorPresent())
-        continue;
-      if ((now - g->GetLastReadMs()) >= HISTORY_PUSH_INTERVAL_MS)
-        continue;
-      _history.Report(TemperatureReport(now, g->GetTemp()));
-      _lastHistoryPushMs = now;
-      return;
-    }
-  }
-
-  void PlatformService() {
-#if defined(ARDUINO_ARCH_RP2040)
-    // TODO: drive BTstack scan loop (earlephilhower/arduino-pico)
-    // BTstack.loop();
-#elif defined(ESP32)
-    // TODO: drive ESP32 BLE scan loop
-#else
-    // Native / test build — no BLE hardware
-#endif
-  }
+  GrillGauge *_grillGauge;
 };
 
 #endif
