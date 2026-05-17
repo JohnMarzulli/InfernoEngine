@@ -66,14 +66,13 @@ public:
     _lastSuccessfulReadMs = millis();
   }
 
-
 private:
   char _serialNumber[11];
-  float _temperature;
-  bool _sensorPresent;
-  bool _sensorOverheating;
-  bool _lowBattery;
-  unsigned long _lastSuccessfulReadMs;
+  float _temperature = 0.0f;
+  bool _sensorPresent = false;
+  bool _sensorOverheating = false;
+  bool _lowBattery = false;
+  unsigned long _lastSuccessfulReadMs = 0;
 };
 
 #endif
