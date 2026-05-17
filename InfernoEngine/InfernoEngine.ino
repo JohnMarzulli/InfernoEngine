@@ -104,6 +104,7 @@ void loop() {
     _thermalControlManager.Service();
     targetFanProportion = _thermalControlManager.GetTargetFanProportion();
   } else {
+    Serial.print("-");
     _unconnectedControlManger.Service();
     targetFanProportion = _unconnectedControlManger.GetTargetFanProportion();
   }
