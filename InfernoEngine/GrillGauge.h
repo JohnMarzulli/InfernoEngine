@@ -55,6 +55,9 @@ public:
 
   // Pit temperature in °C. Only meaningful when IsSensorPresent() is true.
   float GetTemp() const { return _temperature; }
+  float GetTargetTemperature() const {
+    return (_alarmLowCelsius + _alarmHighCelsius) / 2.0f;
+  }
 
   unsigned long GetLastReadMs() const { return _lastSuccessfulReadMs; }
 
@@ -64,10 +67,14 @@ public:
     _sensorOverheating = ad.sensorOverheating;
     _lowBattery = ad.lowBattery;
     _lastSuccessfulReadMs = millis();
+    _alarmLowCelsius = ad.lowAlarm.set ? ad.lowAlarm.threshold : 0.0f;
+    _alarmHighCelsius = ad.highAlarm.set ? ad.highAlarm.threshold : 0.0f;
   }
 
 private:
   char _serialNumber[11];
+  float _alarmLowCelsius = 0.0f;
+  float _alarmHighCelsius = 0.0f;
   float _temperature = 0.0f;
   bool _sensorPresent = false;
   bool _sensorOverheating = false;

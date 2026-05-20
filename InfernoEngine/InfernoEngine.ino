@@ -14,6 +14,7 @@ UnconnectedControlManager _unconnectedControlManger;
 ThermalControlManager _thermalControlManager;
 unsigned long _startTime;
 unsigned long _lastUpdateTime;
+unsigned long _lastDebugPrintTime;
 
 // Walk raw BLE AD structures and return a pointer to Manufacturer Specific
 // Data (type 0xFF), or nullptr if not present. outLen is set to the number
@@ -76,6 +77,7 @@ void loop() {
   unsigned long timeBetweenUpdates = 1000;
   // put your main code here, to run repeatedly:
   unsigned long timeSinceLastUpdate = timeStamp - _lastUpdateTime;
+  unsigned long timeSinceLastDebugPrint = timeStamp - _lastDebugPrintTime;
 
   // Attempt not to flood the serial connection with debug spam
   if (timeSinceLastUpdate < 100) {
@@ -101,6 +103,8 @@ void loop() {
   float targetFanProportion = 0.0f;
 
   if (isConnected) {
+    _thermalControlManager.SetTargetTemperature(
+        _combustionDeviceManager.GetTargetTemperature());
     _thermalControlManager.Service();
     targetFanProportion = _thermalControlManager.GetTargetFanProportion();
   } else {
@@ -111,4 +115,11 @@ void loop() {
 
   _fanHardwareController.SetTarget(targetFanProportion);
   _fanHardwareController.Service();
+
+  if (timeSinceLastDebugPrint > 5000) {
+    Serial.printf("Target Pit Temp: %fC\n",
+                  _combustionDeviceManager.GetTargetTemperature());
+    Serial.printf("Fan target proportion: %f\n", targetFanProportion);
+    _lastDebugPrintTime = timeStamp;
+  }
 }

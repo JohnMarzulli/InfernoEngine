@@ -49,6 +49,14 @@ public:
 
   bool IsConnected() const { return _isConnected; }
 
+  float GetTargetTemperature() const {
+    if (_grillGauge != nullptr) {
+      return _grillGauge->GetTargetTemperature();
+    }
+
+    return 0.0f;
+  }
+
   // Pit temperature from the first connected Grill Gauge whose probe is
   // present.
   float GetCurrentTemperature() const {
