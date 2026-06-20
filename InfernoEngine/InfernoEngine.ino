@@ -38,7 +38,7 @@ static const uint8_t *FindMfgData(const uint8_t *payload, int len,
 static void OnBleAdvertisement(BLEAdvertisement *adv) {
   uint8_t mfgLen = 0;
   const uint8_t *mfg =
-      FindMfgData(adv->getAdvData(), LE_ADVERTISING_DATA_SIZE, &mfgLen);
+    FindMfgData(adv->getAdvData(), LE_ADVERTISING_DATA_SIZE, &mfgLen);
   if (!mfg || mfgLen < 3)
     return;
 
@@ -92,9 +92,9 @@ void loop() {
     _lastUpdateTime = millis();
 
     float currentPitTemperature =
-        _combustionDeviceManager.GetCurrentTemperature();
+      _combustionDeviceManager.GetCurrentTemperature();
     TemperatureReport newReport =
-        TemperatureReport(timeStamp, currentPitTemperature);
+      TemperatureReport(timeStamp, currentPitTemperature);
 
     _thermalControlManager.AddReport(newReport);
     Serial.printf("Added report. Temperature: %fC\n", currentPitTemperature);
@@ -104,7 +104,7 @@ void loop() {
 
   if (isConnected) {
     _thermalControlManager.SetTargetTemperature(
-        _combustionDeviceManager.GetTargetTemperature());
+      _combustionDeviceManager.GetTargetTemperature());
     _thermalControlManager.Service();
     targetFanProportion = _thermalControlManager.GetTargetFanProportion();
   } else {
